@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from patchgoblin.cli import auth, explain, find, inspect, profile
+from patchgoblin.cli import auth, explain, find, inspect, profile, work
 
 app = typer.Typer(
     name="goblin",
@@ -26,4 +26,9 @@ app.add_typer(
     explain.app,
     name="explain",
     help="AI-powered issue analysis and repository investigation.",
+)
+app.add_typer(
+    work.app,
+    name="work",
+    help="Implement an issue in an isolated workspace.",
 )

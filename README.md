@@ -19,7 +19,7 @@ real open-source patches — with the **human always in control** of consequenti
 ## Current Status
 
 ```
-Stage 3: AI Issue Understanding + Repository Investigation
+Stage 4: Repository-Aware Code Generation
 ```
 
 ---
@@ -63,9 +63,9 @@ export GITHUB_TOKEN=your_github_token_here
 goblin auth status
 ```
 
-### LLM (for `goblin explain`)
+### LLM (for `goblin explain` and `goblin work`)
 
-The `explain` command requires an OpenAI-compatible LLM API key.
+The `explain` and `work` commands require an OpenAI-compatible LLM API key.
 
 ```bash
 export LLM_API_KEY=your_llm_api_key_here   # Required
@@ -106,6 +106,27 @@ goblin explain --model gpt-4o pallets/flask#123
 # Analyze using only GitHub metadata (skip repository cloning)
 goblin explain --skip-clone pallets/flask#123
 
+# Stage 4: implement an issue in an isolated workspace
+goblin work start pallets/flask#123
+
+# Skip the human-approval prompt (for scripting)
+goblin work start --yes pallets/flask#123
+
+# Check status of all PatchGoblin workspaces
+goblin work status
+
+# List all workspaces
+goblin work list
+
+# Inspect a specific workspace
+goblin work inspect pg-7f3a21
+
+# View the full diff for a workspace
+goblin work diff pg-7f3a21
+
+# Discard a workspace
+goblin work discard pg-7f3a21
+
 # Find open-source issues matching your contributor profile
 goblin find
 
@@ -128,12 +149,64 @@ goblin find --language javascript --min-stars 100 --limit 10
 
 ---
 
-## `inspect` vs `explain`
+## Commands
 
 | Command | Description |
 |---|---|
 | `goblin inspect OWNER/REPO#N` | **Deterministic** — GitHub issue data, difficulty estimate, heuristic fit score. No LLM. No API key required beyond GitHub. |
-| `goblin explain OWNER/REPO#N` | **AI-powered** — Clones the repository, discovers relevant files, calls an LLM, and returns a structured analysis: what the issue means, where it lives in the code, how to approach it, and what is still unknown. |
+| `goblin explain OWNER/REPO#N` | **AI-powered** — Clones the repository, discovers relevant files, calls an LLM, returns structured analysis. |
+| `goblin work start OWNER/REPO#N` | **Stage 4** — Analyses the issue, asks for human approval, then modifies a disposable isolated workspace and generates a diff for review. |
+
+### Stage 4 workflow
+
+```
+goblin work start owner/repo#123
+        │
+        ▼
+Fetch issue + repository
+        │
+        ▼
+Generate analysis + implementation plan
+        │
+        ▼
+Show plan — ask for human approval
+        │
+   ┌────┴────┐
+   │         │
+  NO        YES
+   │         │
+   ▼         ▼
+ Stop    Create isolated workspace
+              │
+              ▼
+         Clone repo
+              │
+              ▼
+       LLM coding agent
+              │
+              ▼
+         Modify files
+              │
+              ▼
+        Generate diff
+              │
+              ▼
+         Show summary
+```
+
+> **PatchGoblin never modifies the user's original repository during Stage 4.**
+
+Stage 4 does **not**:
+
+- execute repository code
+- run tests against the target repository
+- install dependencies
+- push to any remote
+- create pull requests
+- commit changes
+- modify GitHub in any way
+
+The user must review the diff and take any further action manually.
 
 `explain` analysis is:
 
@@ -184,13 +257,17 @@ The human chooses the issue — PatchGoblin reduces the search space.
 ```
 CLI (goblin)
  ↓
-Services (discovery.py / explain.py)
+Services (discovery / explain / work)
  ↓
 Analysis (issue / repository / contributor / matching)   LLM Provider
  ↓                                                           ↑
-GitHub Client (httpx)                             Repository Inspector
+GitHub Client (httpx)                             Workspace Manager
  ↓                                                           ↑
-GitHub REST API                                     Git clone (read-only)
+GitHub REST API                              Coding Agent (structured edits)
+                                                             ↑
+                                                  Repository Inspector
+                                                             ↑
+                                               Git clone (isolated workspace)
 ```
 
 **Responsibilities:**
@@ -198,18 +275,21 @@ GitHub REST API                                     Git clone (read-only)
 | Layer | Package | Purpose |
 |---|---|---|
 | CLI | `patchgoblin.cli` | User interface, input parsing, Rich output |
-| Services | `patchgoblin.services` | Orchestration: discovery + explain workflows |
+| Services | `patchgoblin.services` | Orchestration: discovery / explain / work |
 | Analysis | `patchgoblin.analysis` | Deterministic heuristics (difficulty, matching) |
 | LLM | `patchgoblin.llm` | OpenAI-compatible provider abstraction + prompts |
-| Repository | `patchgoblin.repository` | Clone, tree, relevance scoring |
+| Coding | `patchgoblin.coding` | Coding agent, file editor, context builder |
+| Workspace | `patchgoblin.workspace` | Workspace creation, metadata, path safety |
+| Repository | `patchgoblin.repository` | Clone, tree, relevance scoring, git helpers |
 | GitHub client | `patchgoblin.github` | All GitHub API communication |
 | Domain models | `patchgoblin.models` | Typed Pydantic models (issues, analysis, etc.) |
 | Config | `patchgoblin.config` | Environment-based configuration |
 
-The CLI never constructs HTTP requests directly.  
-GitHub credentials and LLM credentials are kept strictly separate.  
-Credentials are never included in prompts, logs, or error messages.  
-Repository code is never executed — Stage 3 is purely static analysis.
+The CLI never constructs HTTP requests directly.
+GitHub credentials and LLM credentials are kept strictly separate.
+Credentials are never included in prompts, logs, or error messages.
+Repository code is never executed.
+Workspace modifications are strictly isolated — the user's original repository is never touched.
 
 ---
 
@@ -245,11 +325,14 @@ PatchGoblin treats security as a first-class concern:
 [x] Repository investigation
 [x] Relevant-file discovery
 [x] Implementation planning
+[x] Isolated workspaces
+[x] Repository-aware code modification
+[x] Diff generation
+[x] Human modification approval
+[x] Human diff review
 
-[ ] Repository-aware code generation
-[ ] Sandboxed coding agent
-[ ] Test execution
-[ ] Human diff review
+[ ] Sandboxed test execution
+[ ] Automated test analysis
 [ ] Branch creation
 [ ] Branch push
 [ ] PR creation
