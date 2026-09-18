@@ -19,7 +19,7 @@ real open-source patches — with the **human always in control** of consequenti
 ## Current Status
 
 ```
-Stage 2: Issue Discovery + Contribution Matching
+Stage 3: AI Issue Understanding + Repository Investigation
 ```
 
 ---
@@ -44,6 +44,8 @@ uv run goblin --help
 
 ## Configuration
 
+### GitHub
+
 PatchGoblin reads your GitHub token from the environment.
 
 1. Create a Personal Access Token at <https://github.com/settings/tokens>  
@@ -60,6 +62,19 @@ export GITHUB_TOKEN=your_github_token_here
 ```bash
 goblin auth status
 ```
+
+### LLM (for `goblin explain`)
+
+The `explain` command requires an OpenAI-compatible LLM API key.
+
+```bash
+export LLM_API_KEY=your_llm_api_key_here   # Required
+export LLM_BASE_URL=https://api.openai.com/v1  # Optional (default: OpenAI)
+export LLM_MODEL=gpt-4o-mini               # Optional (default: gpt-4o-mini)
+```
+
+`LLM_BASE_URL` can point to any OpenAI-compatible endpoint, including a local
+[Ollama](https://ollama.com) instance at `http://localhost:11434/v1`.
 
 See [`.env.example`](.env.example) for the full list of supported variables.
 
@@ -79,8 +94,17 @@ goblin auth status
 # Display your GitHub profile
 goblin profile
 
-# Inspect an issue (with deterministic difficulty + heuristic fit)
+# Inspect an issue (deterministic: difficulty estimate + heuristic fit score)
 goblin inspect pallets/flask#123
+
+# AI-powered analysis: what the issue means, where to look, how to approach it
+goblin explain pallets/flask#123
+
+# Analyze using a specific model
+goblin explain --model gpt-4o pallets/flask#123
+
+# Analyze using only GitHub metadata (skip repository cloning)
+goblin explain --skip-clone pallets/flask#123
 
 # Find open-source issues matching your contributor profile
 goblin find
@@ -101,6 +125,22 @@ goblin find --verbose
 # Combine filters
 goblin find --language javascript --min-stars 100 --limit 10
 ```
+
+---
+
+## `inspect` vs `explain`
+
+| Command | Description |
+|---|---|
+| `goblin inspect OWNER/REPO#N` | **Deterministic** — GitHub issue data, difficulty estimate, heuristic fit score. No LLM. No API key required beyond GitHub. |
+| `goblin explain OWNER/REPO#N` | **AI-powered** — Clones the repository, discovers relevant files, calls an LLM, and returns a structured analysis: what the issue means, where it lives in the code, how to approach it, and what is still unknown. |
+
+`explain` analysis is:
+
+- **read-only** — PatchGoblin never modifies repository files.
+- **non-executing** — no repository code is run.
+- **commit-pinned** — the analysis records the repository HEAD SHA so you know exactly what state was analyzed.
+- **advisory** — AI analysis may contain uncertainty; always review before acting.
 
 ---
 
@@ -144,13 +184,13 @@ The human chooses the issue — PatchGoblin reduces the search space.
 ```
 CLI (goblin)
  ↓
-Services (discovery.py)
+Services (discovery.py / explain.py)
  ↓
-Analysis (issue / repository / contributor / matching)
- ↓
-GitHub Client (httpx)
- ↓
-GitHub REST API
+Analysis (issue / repository / contributor / matching)   LLM Provider
+ ↓                                                           ↑
+GitHub Client (httpx)                             Repository Inspector
+ ↓                                                           ↑
+GitHub REST API                                     Git clone (read-only)
 ```
 
 **Responsibilities:**
@@ -158,15 +198,18 @@ GitHub REST API
 | Layer | Package | Purpose |
 |---|---|---|
 | CLI | `patchgoblin.cli` | User interface, input parsing, Rich output |
-| Services | `patchgoblin.services` | Orchestration and business logic |
+| Services | `patchgoblin.services` | Orchestration: discovery + explain workflows |
 | Analysis | `patchgoblin.analysis` | Deterministic heuristics (difficulty, matching) |
+| LLM | `patchgoblin.llm` | OpenAI-compatible provider abstraction + prompts |
+| Repository | `patchgoblin.repository` | Clone, tree, relevance scoring |
 | GitHub client | `patchgoblin.github` | All GitHub API communication |
-| Domain models | `patchgoblin.models` | Typed Pydantic models |
+| Domain models | `patchgoblin.models` | Typed Pydantic models (issues, analysis, etc.) |
 | Config | `patchgoblin.config` | Environment-based configuration |
 
 The CLI never constructs HTTP requests directly.  
-The GitHub client is the only layer that communicates with GitHub.  
-Credentials stay inside the GitHub client and never reach analysis or agent logic.
+GitHub credentials and LLM credentials are kept strictly separate.  
+Credentials are never included in prompts, logs, or error messages.  
+Repository code is never executed — Stage 3 is purely static analysis.
 
 ---
 
@@ -176,9 +219,13 @@ PatchGoblin treats security as a first-class concern:
 
 - Credentials are read from environment variables only — never hardcoded.
 - Tokens are never printed, logged, or included in error messages.
-- Tokens are never sent to an LLM (not yet introduced, but the architecture enforces separation).
-- Stage 2 is strictly **read-only** with respect to GitHub.
-- All consequential actions (push, PR creation) require explicit human approval.
+- GitHub tokens and LLM API keys are never sent across the boundary between subsystems.
+- GitHub issue content and repository files are treated as **untrusted input** — they are
+  clearly delimited in every LLM prompt and the model is instructed not to follow instructions
+  embedded in them (prompt injection defense).
+- Repository investigation is **read-only** — no code is executed, no packages installed,
+  no build scripts run.
+- All consequential actions (push, PR creation) require explicit human approval in later stages.
 
 ---
 
@@ -194,11 +241,12 @@ PatchGoblin treats security as a first-class concern:
 [x] Basic difficulty estimation
 [x] Contributor profile signals
 [x] Contribution-fit heuristic
+[x] LLM issue explanation
+[x] Repository investigation
+[x] Relevant-file discovery
+[x] Implementation planning
 
-[ ] LLM-powered issue explanation
-[ ] Repository investigation
-[ ] Contribution plan generation
-[ ] Repository cloning
+[ ] Repository-aware code generation
 [ ] Sandboxed coding agent
 [ ] Test execution
 [ ] Human diff review

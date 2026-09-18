@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from patchgoblin.cli import auth, find, inspect, profile
+from patchgoblin.cli import auth, explain, find, inspect, profile
 
 app = typer.Typer(
     name="goblin",
@@ -22,3 +22,8 @@ app.add_typer(auth.app, name="auth", help="Manage GitHub authentication.")
 app.add_typer(profile.app, name="profile", help="Display your GitHub profile.")
 app.add_typer(find.app, name="find", help="Find beginner-friendly issues.")
 app.add_typer(inspect.app, name="inspect", help="Inspect a GitHub issue.")
+app.add_typer(
+    explain.app,
+    name="explain",
+    help="AI-powered issue analysis and repository investigation.",
+)
