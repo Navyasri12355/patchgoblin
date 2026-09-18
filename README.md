@@ -19,7 +19,7 @@ real open-source patches — with the **human always in control** of consequenti
 ## Current Status
 
 ```
-Stage 1: CLI + GitHub integration + CI
+Stage 2: Issue Discovery + Contribution Matching
 ```
 
 ---
@@ -79,12 +79,63 @@ goblin auth status
 # Display your GitHub profile
 goblin profile
 
-# Inspect an issue
+# Inspect an issue (with deterministic difficulty + heuristic fit)
 goblin inspect pallets/flask#123
 
-# Placeholder for Stage 2 issue discovery
+# Find open-source issues matching your contributor profile
 goblin find
+
+# Filter by language
+goblin find --language python
+
+# Filter by label
+goblin find --label good-first-issue
+goblin find --label help-wanted
+
+# Limit results
+goblin find --limit 5
+
+# Show per-issue signal breakdown
+goblin find --verbose
+
+# Combine filters
+goblin find --language javascript --min-stars 100 --limit 10
 ```
+
+---
+
+## How Heuristic Fit Works
+
+PatchGoblin uses **deterministic heuristics** (not an LLM) to estimate how well an issue
+matches your contributor profile.
+
+Every fit score is accompanied by the signals that produced it, so you can judge the
+estimate yourself.
+
+**Positive signals:**
+
+| Signal | Description |
+|---|---|
+| Language match | Repository uses a language in your public repos |
+| `good first issue` label | Explicitly marked beginner-friendly |
+| `help wanted` label | Maintainer is actively seeking contributions |
+| Documentation / typo issue | Typically lower barrier to entry |
+| Test-related issue | Good way to learn a codebase |
+| Clear description | Requirements are visible in the issue body |
+| Beginner difficulty estimate | Combination of signals suggests low complexity |
+
+**Negative signals:**
+
+| Signal | Description |
+|---|---|
+| Advanced difficulty estimate | Architecture, security, or complexity signals |
+| No description | Requirements may be unclear |
+| Epic / large feature label | Scope is likely very broad |
+| Security-sensitive label | Higher risk and context required |
+| Long discussion thread | Issue may be contested or complex |
+
+Scores are normalised to **0–100** and labelled as a _heuristic fit_, not an objective measure.
+The human chooses the issue — PatchGoblin reduces the search space.
 
 ---
 
@@ -95,7 +146,7 @@ CLI (goblin)
  ↓
 Services (discovery.py)
  ↓
-Analysis (issue / repository / contributor)
+Analysis (issue / repository / contributor / matching)
  ↓
 GitHub Client (httpx)
  ↓
@@ -108,7 +159,7 @@ GitHub REST API
 |---|---|---|
 | CLI | `patchgoblin.cli` | User interface, input parsing, Rich output |
 | Services | `patchgoblin.services` | Orchestration and business logic |
-| Analysis | `patchgoblin.analysis` | Heuristics and (future) LLM analysis |
+| Analysis | `patchgoblin.analysis` | Deterministic heuristics (difficulty, matching) |
 | GitHub client | `patchgoblin.github` | All GitHub API communication |
 | Domain models | `patchgoblin.models` | Typed Pydantic models |
 | Config | `patchgoblin.config` | Environment-based configuration |
@@ -126,6 +177,7 @@ PatchGoblin treats security as a first-class concern:
 - Credentials are read from environment variables only — never hardcoded.
 - Tokens are never printed, logged, or included in error messages.
 - Tokens are never sent to an LLM (not yet introduced, but the architecture enforces separation).
+- Stage 2 is strictly **read-only** with respect to GitHub.
 - All consequential actions (push, PR creation) require explicit human approval.
 
 ---
@@ -138,13 +190,15 @@ PatchGoblin treats security as a first-class concern:
 [x] Basic GitHub authentication
 [x] Basic issue inspection
 [x] CI
+[x] Issue discovery
+[x] Basic difficulty estimation
+[x] Contributor profile signals
+[x] Contribution-fit heuristic
 
-[ ] Issue discovery
-[ ] Contributor profile analysis
-[ ] Issue/repository analysis
-[ ] Contribution-fit matching
+[ ] LLM-powered issue explanation
 [ ] Repository investigation
-[ ] Implementation planning
+[ ] Contribution plan generation
+[ ] Repository cloning
 [ ] Sandboxed coding agent
 [ ] Test execution
 [ ] Human diff review

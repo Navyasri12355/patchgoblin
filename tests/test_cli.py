@@ -183,7 +183,10 @@ def test_inspect_missing_token(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_find_placeholder() -> None:
+def test_find_requires_auth() -> None:
+    """goblin find without a token should exit non-zero and mention authentication."""
     result = runner.invoke(app, ["find"])
-    assert result.exit_code == 0
-    assert "Stage 2" in result.output or "stage 2" in result.output.lower()
+    assert result.exit_code != 0
+    assert (
+        "not authenticated" in result.output.lower() or "goblin auth login" in result.output.lower()
+    )

@@ -81,6 +81,8 @@ class ContributorProfile(BaseModel):
     followers: int = 0
     following: int = 0
     profile_url: str
+    # Populated by the discovery service after fetching the user's public repos.
+    known_languages: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_api(cls, data: dict) -> ContributorProfile:

@@ -93,14 +93,22 @@ class GitHubClient:
         data = self._request("GET", f"/repos/{owner}/{repo}/issues", params=params)
         return [IssueInfo.from_api(item) for item in data]
 
-    def search_issues(self, query: str, per_page: int = 30) -> list[IssueInfo]:
+    def search_issues(self, query: str, per_page: int = 30, page: int = 1) -> list[IssueInfo]:
         """Search GitHub issues using the search API."""
         data = self._request(
             "GET",
             "/search/issues",
-            params={"q": query, "per_page": per_page},
+            params={"q": query, "per_page": per_page, "page": page},
         )
         return [IssueInfo.from_api(item) for item in data.get("items", [])]
+
+    def list_user_repos(self, per_page: int = 100) -> list[dict]:
+        """Return the authenticated user's public repositories (raw API dicts)."""
+        return self._request(
+            "GET",
+            "/user/repos",
+            params={"per_page": per_page, "type": "owner", "sort": "updated"},
+        )
 
     def close(self) -> None:
         """Close the underlying HTTP client."""
