@@ -5,7 +5,15 @@ from __future__ import annotations
 import httpx
 
 from patchgoblin.config import Config
-from patchgoblin.github.models import ContributorProfile, IssueInfo, RepositoryInfo
+from patchgoblin.github.models import (
+    ContributorProfile,
+    IssueInfo,
+    PRCheckRun,
+    PRComment,
+    PRReview,
+    PullRequestInfo,
+    RepositoryInfo,
+)
 
 
 class GitHubAuthError(Exception):
@@ -119,3 +127,122 @@ class GitHubClient:
 
     def __exit__(self, *_) -> None:
         self.close()
+
+    # ------------------------------------------------------------------
+    # Stage 5: Pull Request and Feedback methods
+    # ------------------------------------------------------------------
+
+    def create_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        head: str,
+        base: str,
+        body: str,
+        draft: bool = False,
+    ) -> PullRequestInfo:
+        """Create a pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            title: PR title.
+            head: Head branch (e.g., "feature-branch" or "owner:feature-branch").
+            base: Base branch (e.g., "main").
+            body: PR body/description.
+            draft: Whether to create as a draft PR.
+
+        Returns:
+            PullRequestInfo with the created PR details.
+        """
+        data = self._request(
+            "POST",
+            f"/repos/{owner}/{repo}/pulls",
+            json={
+                "title": title,
+                "head": head,
+                "base": base,
+                "body": body,
+                "draft": draft,
+            },
+        )
+        return PullRequestInfo.from_api(data)
+
+    def get_pull_request(self, owner: str, repo: str, pr_number: int) -> PullRequestInfo:
+        """Get a single pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            PullRequestInfo with the PR details.
+        """
+        data = self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}")
+        return PullRequestInfo.from_api(data)
+
+    def list_pull_request_comments(self, owner: str, repo: str, pr_number: int) -> list[PRComment]:
+        """List comments on a pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            List of PRComment objects.
+        """
+        data = self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/comments")
+        return [PRComment.from_api(item) for item in data]
+
+    def list_pull_request_reviews(self, owner: str, repo: str, pr_number: int) -> list[PRReview]:
+        """List reviews on a pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            List of PRReview objects.
+        """
+        data = self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")
+        return [PRReview.from_api(item) for item in data]
+
+    def list_pull_request_check_runs(
+        self, owner: str, repo: str, pr_number: int
+    ) -> list[PRCheckRun]:
+        """List CI check runs for a pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            List of PRCheckRun objects.
+        """
+        # Get the PR to find the head commit SHA
+        pr = self.get_pull_request(owner, repo, pr_number)
+        # Use the combined status endpoint which is more commonly available
+        data = self._request(
+            "GET",
+            f"/repos/{owner}/{repo}/commits/{pr.head_ref}/status",
+        )
+        # Convert statuses to check-run-like objects
+        check_runs = []
+        for status in data.get("statuses", []):
+            check_runs.append(
+                PRCheckRun(
+                    id=status.get("id", 0),
+                    name=status.get("context", "unknown"),
+                    status=status.get("state", "unknown"),
+                    conclusion="success" if status.get("state") == "success" else "failure",
+                    started_at=status.get("created_at", ""),
+                    completed_at=status.get("updated_at"),
+                    url=status.get("target_url", ""),
+                )
+            )
+        return check_runs

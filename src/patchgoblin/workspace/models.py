@@ -19,6 +19,9 @@ class WorkspaceStatus(StrEnum):
     REVIEW = "review"
     DISCARDED = "discarded"
     FAILED = "failed"
+    TESTED = "tested"  # Stage 5: tests have been run
+    PUSHED = "pushed"  # Stage 5: branch has been pushed
+    PR_OPENED = "pr_opened"  # Stage 5: PR has been opened
 
 
 class WorkspaceMetadata(BaseModel):
@@ -43,6 +46,32 @@ class WorkspaceMetadata(BaseModel):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Stage 5 fields
+    test_run_result: dict | None = Field(
+        default=None,
+        description="Test run result (serialized TestRunResult).",
+    )
+    branch_name: str | None = Field(
+        default=None,
+        description="Name of the PatchGoblin-created branch.",
+    )
+    pushed: bool = Field(
+        default=False,
+        description="Whether the branch has been pushed to remote.",
+    )
+    pr_url: str | None = Field(
+        default=None,
+        description="URL of the created pull request.",
+    )
+    pr_number: int | None = Field(
+        default=None,
+        description="Pull request number.",
+    )
+    pr_status: str | None = Field(
+        default=None,
+        description="Pull request status (open/closed/merged).",
+    )
 
     @property
     def path(self) -> Path:

@@ -4,6 +4,9 @@ Flow:
   Fetch issue + repo → analyse → show plan → human approval
   → create workspace → clone → verify clean → coding agent
   → diff → show results
+
+Stage 5 extensions:
+  → test (sandboxed) → push (branch) → pr (pull request) → feedback (read-only)
 """
 
 from __future__ import annotations
@@ -170,6 +173,106 @@ class WorkService:
             workspace=meta,
             change_result=change_result,
         )
+
+    # ------------------------------------------------------------------
+    # Stage 5: Test, Push, PR, Feedback methods
+    # ------------------------------------------------------------------
+
+    def run_tests(self, task_id: str, skip_install: bool = False):
+        """Run sandboxed tests for a workspace.
+
+        Args:
+            task_id: Task ID of the workspace to test.
+            skip_install: If True, skip dependency installation.
+
+        Returns:
+            TestRunResult with execution details.
+
+        Raises:
+            WorkError: If test execution fails.
+        """
+        from patchgoblin.services.test_service import TestService, TestServiceError
+
+        test_service = TestService(self._ws_manager)
+        try:
+            return test_service.run_tests(task_id, skip_install=skip_install)
+        except TestServiceError as exc:
+            raise WorkError(f"Test execution failed: {exc}") from exc
+
+    def push_branch(
+        self, task_id: str, commit_message: str, remote: str = "origin"
+    ) -> tuple[str, str]:
+        """Create branch, commit changes, and push to remote.
+
+        Args:
+            task_id: Task ID of the workspace.
+            commit_message: Commit message for the changes.
+            remote: Remote name (default: "origin").
+
+        Returns:
+            Tuple of (branch_name, remote_ref) that was pushed.
+
+        Raises:
+            WorkError: If push fails or violates safety rules.
+        """
+        from patchgoblin.services.push_service import PushService, PushServiceError
+
+        push_service = PushService(self._ws_manager)
+        try:
+            return push_service.push_branch(task_id, commit_message, remote)
+        except PushServiceError as exc:
+            raise WorkError(f"Push failed: {exc}") from exc
+
+    def create_pr(
+        self,
+        task_id: str,
+        title: str,
+        body: str,
+        draft: bool = False,
+    ):
+        """Create a pull request for a workspace.
+
+        Args:
+            task_id: Task ID of the workspace.
+            title: PR title.
+            body: PR body.
+            draft: Whether to create as a draft PR.
+
+        Returns:
+            PullRequestInfo with the created PR details.
+
+        Raises:
+            WorkError: If PR creation fails or violates safety rules.
+        """
+        from patchgoblin.services.pr_service import PRService, PRServiceError
+
+        pr_service = PRService(self._github, self._ws_manager)
+        try:
+            return pr_service.create_pull_request(task_id, title, body, draft)
+        except PRServiceError as exc:
+            raise WorkError(f"PR creation failed: {exc}") from exc
+
+    def get_feedback(self, owner: str, repo: str, pr_number: int):
+        """Get feedback for a pull request (read-only).
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            PRFeedback with aggregated feedback.
+
+        Raises:
+            WorkError: If feedback retrieval fails.
+        """
+        from patchgoblin.services.feedback_service import FeedbackService, FeedbackServiceError
+
+        feedback_service = FeedbackService(self._github)
+        try:
+            return feedback_service.get_feedback(owner, repo, pr_number)
+        except FeedbackServiceError as exc:
+            raise WorkError(f"Feedback retrieval failed: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Internal helpers

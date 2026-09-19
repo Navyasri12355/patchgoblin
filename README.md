@@ -19,7 +19,7 @@ real open-source patches — with the **human always in control** of consequenti
 ## Current Status
 
 ```
-Stage 4: Repository-Aware Code Generation
+Stage 5: Sandboxed Test Execution + Branch/PR Workflow
 ```
 
 ---
@@ -127,6 +127,24 @@ goblin work diff pg-7f3a21
 # Discard a workspace
 goblin work discard pg-7f3a21
 
+# Stage 5: Run sandboxed tests on a workspace
+goblin work test pg-7f3a21
+
+# Skip dependency installation (if already cached)
+goblin work test pg-7f3a21 --skip-install
+
+# Stage 5: Push branch to remote
+goblin work push pg-7f3a21
+
+# Stage 5: Create pull request
+goblin work pr pg-7f3a21
+
+# Stage 5: Create as draft PR
+goblin work pr pg-7f3a21 --draft
+
+# Stage 5: Get maintainer feedback on PR
+goblin work feedback pg-7f3a21
+
 # Find open-source issues matching your contributor profile
 goblin find
 
@@ -156,6 +174,10 @@ goblin find --language javascript --min-stars 100 --limit 10
 | `goblin inspect OWNER/REPO#N` | **Deterministic** — GitHub issue data, difficulty estimate, heuristic fit score. No LLM. No API key required beyond GitHub. |
 | `goblin explain OWNER/REPO#N` | **AI-powered** — Clones the repository, discovers relevant files, calls an LLM, returns structured analysis. |
 | `goblin work start OWNER/REPO#N` | **Stage 4** — Analyses the issue, asks for human approval, then modifies a disposable isolated workspace and generates a diff for review. |
+| `goblin work test TASK-ID` | **Stage 5** — Runs sandboxed tests on a workspace with explicit human approval. |
+| `goblin work push TASK-ID` | **Stage 5** — Creates a branch, commits changes, and pushes to remote with explicit human approval. |
+| `goblin work pr TASK-ID` | **Stage 5** — Creates a pull request with explicit human approval. |
+| `goblin work feedback TASK-ID` | **Stage 5** — Fetches and displays maintainer feedback (read-only). |
 
 ### Stage 4 workflow
 
@@ -208,6 +230,70 @@ Stage 4 does **not**:
 
 The user must review the diff and take any further action manually.
 
+### Stage 5 workflow
+
+```
+goblin work diff pg-7f3a21  (Stage 4 output)
+        │
+        ▼
+Human approval: run tests?
+        │
+   ┌────┴────┐
+   │         │
+  NO        YES
+   │         │
+   ▼         ▼
+ Stop    Sandboxed dependency install
+              │
+              ▼
+        Sandboxed test execution
+              │
+              ▼
+        Show test results
+              │
+              ▼
+Human approval: push branch?
+        │
+   ┌────┴────┐
+   │         │
+  NO        YES
+   │         │
+   ▼         ▼
+ Stop    Create PatchGoblin branch
+              │
+              ▼
+         Commit changes
+              │
+              ▼
+        Push to remote
+              │
+              ▼
+Human approval: open PR?
+        │
+   ┌────┴────┐
+   │         │
+  NO        YES
+   │         │
+   ▼         ▼
+ Stop    Create pull request
+              │
+              ▼
+        Show maintainer feedback (read-only)
+```
+
+> **PatchGoblin only executes repository code inside a hardened, credential-free sandbox, and only after explicit approval. Pushing and opening a PR each require their own separate, explicit approval. PatchGoblin never merges anything.**
+
+Stage 5 adds:
+
+- **Sandboxed test execution** — Runs repository tests in an isolated, resource-limited environment
+- **Structured test analysis** — Parses test output and provides summaries
+- **Branch creation** — Creates PatchGoblin-owned branches with safe naming
+- **Branch push** — Pushes branches only after explicit human approval
+- **PR creation** — Creates pull requests only after explicit human approval
+- **Feedback polling** — Fetches maintainer feedback (read-only, no automated responses)
+
+Each step requires separate human approval. Approving one step never implicitly approves the next.
+
 `explain` analysis is:
 
 - **read-only** — PatchGoblin never modifies repository files.
@@ -257,7 +343,7 @@ The human chooses the issue — PatchGoblin reduces the search space.
 ```
 CLI (goblin)
  ↓
-Services (discovery / explain / work)
+Services (discovery / explain / work / test / push / pr / feedback)
  ↓
 Analysis (issue / repository / contributor / matching)   LLM Provider
  ↓                                                           ↑
@@ -268,6 +354,12 @@ GitHub REST API                              Coding Agent (structured edits)
                                                   Repository Inspector
                                                              ↑
                                                Git clone (isolated workspace)
+                                                             ↑
+                                                Sandbox (Stage 5: execution)
+                                                             ↑
+                                            Testing (Stage 5: language detection, test execution)
+                                                             ↑
+                                            Git (Stage 5: branch, push operations)
 ```
 
 **Responsibilities:**
@@ -275,21 +367,25 @@ GitHub REST API                              Coding Agent (structured edits)
 | Layer | Package | Purpose |
 |---|---|---|
 | CLI | `patchgoblin.cli` | User interface, input parsing, Rich output |
-| Services | `patchgoblin.services` | Orchestration: discovery / explain / work |
+| Services | `patchgoblin.services` | Orchestration: discovery / explain / work / test / push / pr / feedback |
 | Analysis | `patchgoblin.analysis` | Deterministic heuristics (difficulty, matching) |
 | LLM | `patchgoblin.llm` | OpenAI-compatible provider abstraction + prompts |
 | Coding | `patchgoblin.coding` | Coding agent, file editor, context builder |
 | Workspace | `patchgoblin.workspace` | Workspace creation, metadata, path safety |
 | Repository | `patchgoblin.repository` | Clone, tree, relevance scoring, git helpers |
 | GitHub client | `patchgoblin.github` | All GitHub API communication |
+| Sandbox | `patchgoblin.sandbox` | Sandboxed code execution with resource limits (Stage 5) |
+| Testing | `patchgoblin.testing` | Language detection, test execution, result parsing (Stage 5) |
+| Git | `patchgoblin.git` | Branch creation, push operations (Stage 5) |
 | Domain models | `patchgoblin.models` | Typed Pydantic models (issues, analysis, etc.) |
 | Config | `patchgoblin.config` | Environment-based configuration |
 
 The CLI never constructs HTTP requests directly.
 GitHub credentials and LLM credentials are kept strictly separate.
 Credentials are never included in prompts, logs, or error messages.
-Repository code is never executed.
+Repository code is never executed outside the sandbox.
 Workspace modifications are strictly isolated — the user's original repository is never touched.
+Stage 5 adds three explicit approval gates: test execution, branch push, and PR creation.
 
 ---
 
@@ -305,7 +401,13 @@ PatchGoblin treats security as a first-class concern:
   embedded in them (prompt injection defense).
 - Repository investigation is **read-only** — no code is executed, no packages installed,
   no build scripts run.
-- All consequential actions (push, PR creation) require explicit human approval in later stages.
+- **Stage 5 sandboxing** — Repository code is only executed inside a hardened, credential-free sandbox
+  with resource limits (CPU, memory, time, disk, process count) and no network access except for
+  explicitly allow-listed package installation.
+- All consequential actions (push, PR creation) require explicit human approval at each step.
+- PatchGoblin never merges anything, force-pushes, or performs any destructive Git operations.
+- Branch naming follows a strict `patchgoblin/` prefix convention to prevent conflicts with user branches.
+- Protected branches (main, master, develop, etc.) are never modified by PatchGoblin.
 
 ---
 
@@ -330,13 +432,16 @@ PatchGoblin treats security as a first-class concern:
 [x] Diff generation
 [x] Human modification approval
 [x] Human diff review
+[x] Sandboxed test execution
+[x] Automated test analysis
+[x] Branch creation
+[x] Branch push
+[x] PR creation
+[x] Maintainer feedback loop (read-only)
 
-[ ] Sandboxed test execution
-[ ] Automated test analysis
-[ ] Branch creation
-[ ] Branch push
-[ ] PR creation
-[ ] Maintainer feedback loop
+[ ] Automated response to review comments
+[ ] Auto-merge (explicitly out of scope / may never be built)
+[ ] Multi-repository batch workflows
 ```
 
 Future agentic functionality will follow the principle:
