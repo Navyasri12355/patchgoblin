@@ -609,7 +609,7 @@ Sandboxed tests were run before creating this PR.
             f"[bold]Head:[/bold] {head}\n\n"
             "[bold]Body preview:[/bold]\n"
             f'"""{body}"""\n\n'
-            ("[yellow]This will be a DRAFT PR.[/yellow]" if draft else ""),
+            + ("[yellow]This will be a DRAFT PR.[/yellow]" if draft else ""),
             title="[bold]Open Pull Request[/bold]",
         )
     )
